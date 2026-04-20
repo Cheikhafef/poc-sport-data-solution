@@ -26,41 +26,42 @@ Ce projet implémente un pipeline complet, industrialisé, et orchestré permett
 | Visualisation | Power BI Desktop              |
 | Environnement | Ubuntu WSL2 (Windows 11)      |
 
-## 📁 Structure du projet <br>
-   poc-sport-data-solution/
-   ├── 1_data_generation/
-   │   ├── generate_strava_data.py    # Génération 4212 activités simulées
-   │   └── interface_saisie.py        # Saisie live → Debezium → Slack
-   ├── 2_database/
-   │   └── load_data.py               # Chargement initial PostgreSQL
-   ├── 3_pipeline_etl/
-   │   ├── bronze_layer.py            # Ingestion brute → Delta Lake
-   │   ├── silver_layer.py            # Nettoyage + validation distances
-   │   ├── gold_layer.py              # Calcul avantages métier
-   │   ├── gold_to_postgres.py        # Export Gold → Log System
-   │   └── etl_spark.py               # Pipeline tout-en-un
-   ├── 4_data_quality/
-   │   └── tests_qualite.py           # 15/15 tests PASS
-   ├── 5_monitoring/
-   │   ├── docker-compose.yml         # Airflow + Redpanda + Debezium + Spark
-   │   └── dags/
-   │       └── dag_sport_pipeline.py  # DAG orchestration lundi 6h
-   ├── 6_restitution/
-   │   ├── slack_notifier.py          # Envoi manuel Slack
-   |   ├── rapport_poc_sport.pbix                        
-   │   └── redpanda_slack_consumer.py # Consumer CDC temps réel
-   ├── delta_lake/
-   │   ├── bronze/                    # Données brutes
-   │   ├── silver/                    # Données nettoyées
-   │   └── gold/                      # Avantages calculés
-   ├── data/
-   │   ├── Données_RH.xlsx
-   │   ├── Données_Sportive.xlsx
-   │   └── strava_simulated_data.csv
-   ├── pipeline_complet.py            # Orchestration manuelle complète
-   ├── docs/
-   │   └── architecture.png
-   └── README.md
+## 📁 Structure du projet
+
+poc-sport-data-solution/
+├── 1_data_generation/
+│   ├── generate_strava_data.py     # Génération 4212 activités simulées
+│   └── interface_saisie.py         # Saisie live → Debezium → Slack
+├── 2_database/
+│   └── load_data.py                # Chargement initial PostgreSQL
+├── 3_pipeline_etl/
+│   ├── bronze_layer.py             # Ingestion brute → Delta Lake
+│   ├── silver_layer.py             # Nettoyage + validation distances
+│   ├── gold_layer.py               # Calcul avantages métier
+│   ├── gold_to_postgres.py         # Export Gold → Log System
+│   └── etl_spark.py                # Pipeline tout-en-un
+├── 4_data_quality/
+│   └── tests_qualite.py            # 15/15 tests PASS
+├── 5_monitoring/
+│   ├── docker-compose.yml          # Airflow + Redpanda + Debezium + Spark
+│   └── dags/
+│       └── dag_sport_pipeline.py   # DAG orchestration lundi 6h
+├── 6_restitution/
+│   ├── slack_notifier.py           # Envoi manuel Slack
+│   ├── rapport_poc_sport.pbix
+│   └── redpanda_slack_consumer.py  # Consumer CDC temps réel
+├── delta_lake/
+│   ├── bronze/                     # Données brutes
+│   ├── silver/                     # Données nettoyées
+│   └── gold/                       # Avantages calculés
+├── data/
+│   ├── Données_RH.xlsx
+│   ├── Données_Sportive.xlsx
+│   └── strava_simulated_data.csv
+├── pipeline_complet.py             # Orchestration manuelle complète
+├── docs/
+│   └── architecture.png
+└── README.md
 
 
    ------
