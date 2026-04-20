@@ -1,0 +1,131 @@
+services:
+
+  # ───────────────────────────────────────────────
+  #  POSTGRES POUR AIRFLOW
+  # ───────────────────────────────────────────────
+  postgres-airflow:
+    image: postgres:13
+    container_name: postgres-airflow
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres_airflow_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ───────────────────────────────────────────────
+  #  AIRFLOW WEBSERVER
+  # ───────────────────────────────────────────────
+  airflow-webserver:
+    image: apache/airflow:2.8.0
+    container_name: airflow-webserver
+    depends_on:
+      postgres-airflow:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres-airflow/airflow
+      AIRFLOW__CORE__FERNET_KEY: ''
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+    ports:
+      - "8080:8080"
+    # Initialise la DB, crée l'admin et lance le serveur
+    command: bash -c "airflow db init && airflow users create --username admin --firstname admin --lastname admin --role Admin --email admin@example.com --password admin123 && airflow webserver"
+
+  # ───────────────────────────────────────────────
+  #  AIRFLOW SCHEDULER
+  # ───────────────────────────────────────────────
+  airflow-scheduler:
+    image: apache/airflow:2.8.0
+    container_name: airflow-scheduler
+    depends_on:
+      postgres-airflow:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres-airflow/airflow
+      AIRFLOW__CORE__FERNET_KEY: ''
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+    command: scheduler
+
+  # ───────────────────────────────────────────────
+  #  REDPANDA (KAFKA)
+  # ───────────────────────────────────────────────
+  redpanda:
+    image: redpandadata/redpanda:latest
+    container_name: redpanda
+    command:
+      - redpanda
+      - start
+      - --smp 1
+      - --memory 512M
+      - --overprovisioned
+      - --node-id 0
+      - --kafka-addr PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+
+  # ───────────────────────────────────────────────
+  #  DEBEZIUM CONNECT
+  # ───────────────────────────────────────────────
+  debezium:
+    image: debezium/connect:2.4
+    container_name: debezium
+    depends_on:
+      - redpanda
+    environment:
+      BOOTSTRAP_SERVERS: redpanda:29092
+      GROUP_ID: debezium-group
+      CONFIG_STORAGE_TOPIC: debezium_configs
+      OFFSET_STORAGE_TOPIC: debezium_offsets
+      STATUS_STORAGE_TOPIC: debezium_status
+    ports:
+      - "8083:8083"
+
+  # ───────────────────────────────────────────────
+  #  SPARK MASTER
+  # ───────────────────────────────────────────────
+  spark-master:
+    image: apache/spark:3.5.1
+    container_name: spark-master
+    environment:
+      - SPARK_MODE=master
+    ports:
+      - "8090:8080"
+      - "7077:7077"
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+
+  # ───────────────────────────────────────────────
+  #  SPARK WORKER
+  # ───────────────────────────────────────────────
+  spark-worker:
+    image: apache/spark:3.5.1
+    container_name: spark-worker
+    environment:
+      - SPARK_MODE=worker
+    depends_on:
+      - spark-master
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+
+# ───────────────────────────────────────────────
+#  VOLUMES
+# ───────────────────────────────────────────────
+volumes:
+  postgres_airflow_data:
+  spark-master-data:
+  spark-worker-data:

@@ -1,0 +1,16 @@
+﻿test,statut,detail
+Pas de doublons ID salarié,✅ PASS,0 doublon(s)
+Salaire brut > 0,✅ PASS,0 salaire(s) invalide(s)
+Type contrat valide (CDI/CDD),✅ PASS,0 contrat(s) invalide(s)
+Date d'embauche non nulle,✅ PASS,0 date(s) manquante(s)
+Moyen de déplacement valide,✅ PASS,0 mode(s) invalide(s)
+Distance jamais négative,✅ PASS,0 distance(s) négative(s)
+Temps écoulé > 0 secondes,✅ PASS,0 durée(s) invalide(s)
+Date début < Date fin,✅ PASS,0 activité(s) incohérente(s)
+Type sport non nul,✅ PASS,0 type(s) manquant(s)
+Activités dans les 12 derniers mois,❌ FAIL,13 activité(s) hors période
+ID salarié existe dans RH,✅ PASS,0 ID inconnu(s)
+Montant prime >= 0,✅ PASS,
+Nb activités >= 0,✅ PASS,
+Prime uniquement pour déplacement actif,✅ PASS,
+Bien-être uniquement si >= 15 activités,✅ PASS,
