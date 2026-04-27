@@ -95,9 +95,11 @@ df_act = spark.read.jdbc(DB_URL, "activites", properties=DB_PROPS)
 # ───────────────────────────────────────────────
 # 5. BRONZE LAYER
 # ───────────────────────────────────────────────
-df_sal.write.format("delta").mode("overwrite").save(f"{DELTA_PATH}/salaries")
-df_act.write.format("delta").mode("overwrite").save(f"{DELTA_PATH}/activites")
-
+# ───────────────────────────────────────────────
+# 5. BRONZE LAYER
+# ───────────────────────────────────────────────
+df_sal.write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(f"{DELTA_PATH}/salaries")
+df_act.write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(f"{DELTA_PATH}/activites")
 # ───────────────────────────────────────────────
 # 6. TRANSFORMATION — Calcul des distances
 # ───────────────────────────────────────────────
@@ -120,7 +122,7 @@ for _, row in df_sal_pd.iterrows():
             resultats.append({
                 "id_salarie": int(row["id_salarie"]),
                 "declaration_ok": dist <= DISTANCE_MAX[mode],
-                "distance_m": dist
+                "distance_m": float(dist)
             })
             continue
 
@@ -130,21 +132,30 @@ for _, row in df_sal_pd.iterrows():
         "distance_m": None
     })
 
-df_distances = spark.createDataFrame(resultats)
+from pyspark.sql.types import StructType, StructField, LongType, BooleanType, DoubleType
 
+schema_dist = StructType([
+    StructField("id_salarie", LongType(), True),
+    StructField("declaration_ok", BooleanType(), True),
+    StructField("distance_m", DoubleType(), True)
+])
+
+df_distances = spark.createDataFrame(resultats, schema=schema_dist)
 # ───────────────────────────────────────────────
 # 7. TRANSFORMATION — Calcul des avantages
 # ───────────────────────────────────────────────
 print("💰 Calcul des avantages...")
 
+# 1. On compte les activités
 df_nb_act = (
     df_act.groupBy("id_salarie")
     .count()
     .withColumnRenamed("count", "nb_activites")
 )
 
+# 2. On crée le DataFrame final en gardant BIEN toutes les colonnes de df_sal
 df_final = (
-    df_sal
+    df_sal  # Contient id_salarie, nom, prenom, salaire_brut, moyen_deplacement...
     .join(df_nb_act, "id_salarie", "left")
     .join(df_distances.select("id_salarie", "declaration_ok"), "id_salarie", "left")
     .fillna({"nb_activites": 0, "declaration_ok": True})
@@ -157,14 +168,21 @@ df_final = (
                  .cast(DoubleType()))
     .withColumn("jours_bienetre", (F.col("nb_activites") >= 15).cast(BooleanType()))
     .withColumn("date_calcul", F.current_date())
+    # ICI : On s'assure de sélectionner EXACTEMENT ce que PostgreSQL attend
+    .select(
+        "id_salarie",
+        "prime_sportive",
+        "montant_prime",
+        "jours_bienetre",
+        F.col("nb_activites").cast(IntegerType()),
+        "date_calcul"
+    )
 )
-
 # ───────────────────────────────────────────────
 # 8. GOLD LAYER → Delta Lake
 # ───────────────────────────────────────────────
 print("💾 Écriture Gold Layer → Delta Lake...")
-df_final.write.format("delta").mode("overwrite").save(f"{DELTA_PATH}/avantages")
-
+df_final.write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(f"{DELTA_PATH}/avantages")
 # ───────────────────────────────────────────────
 # 9. CHARGEMENT FINAL PostgreSQL
 # ───────────────────────────────────────────────

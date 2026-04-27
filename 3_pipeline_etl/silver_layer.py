@@ -35,25 +35,20 @@ print("🥈 SILVER LAYER — Nettoyage + Validation + Jointure référentiels...
 # ───────────────────────────────────────────────
 # 2. Initialisation Spark
 # ───────────────────────────────────────────────
+
+
+
 spark = SparkSession.builder \
     .appName("Silver_Layer") \
     .master("local[*]") \
-    .config(
-        "spark.jars.packages",
-        "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1,"
-        "io.delta:delta-spark_2.12:3.2.1"
-    ) \
-    .config("spark.sql.extensions",
-            "io.delta.sql.DeltaSparkSessionExtension") \
-    .config("spark.sql.catalog.spark_catalog",
-            "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
-    .config("spark.sql.execution.arrow.pyspark.enabled", "true") \
+    .config("spark.jars.packages", 
+            "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1," # Version de ton spark
+            "io.delta:delta-spark_2.12:3.1.0") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
     .getOrCreate()
 
 spark.sparkContext.setLogLevel("ERROR")
-
-
-
 # ══════════════════════════════════════════════════
 # 1. LECTURE BRONZE LAYER
 # ══════════════════════════════════════════════════

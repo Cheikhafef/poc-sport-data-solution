@@ -1,3 +1,8 @@
+"""
+Ce script assure la réinitialisation et le chargement des données brutes dans PostgreSQL. 
+Il transforme les fichiers sources (Excel/CSV) 
+en tables SQL structurées, constituant la première étape du pipeline (Ingestion).
+ """
 import pandas as pd
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
@@ -6,7 +11,7 @@ import os
 # ───────────────────────────────────────────────
 # 1. Charger les variables d'environnement
 # ───────────────────────────────────────────────
-load_dotenv()
+load_dotenv() # Charge les identifiants DB depuis le fichier .env
 
 DB_USER = os.getenv("POSTGRES_USER")
 DB_PASS = os.getenv("POSTGRES_PASSWORD")
@@ -19,14 +24,14 @@ SPORT_FILE = os.getenv("SPORT_FILE")
 STRAVA_FILE = os.getenv("STRAVA_FILE")
 
 # ───────────────────────────────────────────────
-# 2. Connexion PostgreSQL
+# 2. Initialisation de la connexion PostgreSQL
 # ───────────────────────────────────────────────
 engine = create_engine(
     f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 )
 
 # ───────────────────────────────────────────────
-# 3. RESET propre des tables
+# 3. RESET des tables (Nettoyage avant chargement)
 # ───────────────────────────────────────────────
 with engine.begin() as conn:
     conn.execute(text("TRUNCATE TABLE activites RESTART IDENTITY CASCADE"))
@@ -36,7 +41,7 @@ with engine.begin() as conn:
 print("🧹 Tables vidées proprement (TRUNCATE + RESTART IDENTITY).")
 
 # ───────────────────────────────────────────────
-# 4. Chargement des données RH
+# 4. Chargement des données RH (Référentiel Salariés)
 # ───────────────────────────────────────────────
 df_rh = pd.read_excel(RH_FILE)
 
@@ -53,12 +58,12 @@ df_rh = df_rh.rename(columns={
     "Adresse du domicile":  "adresse",
     "Moyen de déplacement": "moyen_deplacement",
 })
-
+#Insertion dans la table 'salaries'
 df_rh.to_sql("salaries", engine, if_exists="append", index=False)
 print(f"✅ {len(df_rh)} salariés chargés dans 'salaries'.")
 
 # ───────────────────────────────────────────────
-# 5. Chargement des sports déclarés
+#5. Chargement des sports déclarés (Source déclarative)
 # ───────────────────────────────────────────────
 df_sport = pd.read_excel(SPORT_FILE)
 
@@ -68,10 +73,10 @@ df_sport = df_sport.rename(columns={
 })
 
 df_sport.to_sql("sports_declares", engine, if_exists="append", index=False)
-print(f"✅ {len[df_sport]} lignes chargées dans 'sports_declares'.")
+print(f"✅ {len(df_sport)} lignes chargées dans 'sports_declares'.")
 
 # ───────────────────────────────────────────────
-# 6. Chargement des activités Strava simulées
+# 6. Chargement des activités Strava (Données dynamiques)
 # ───────────────────────────────────────────────
 df_strava = pd.read_csv(STRAVA_FILE)
 
@@ -85,17 +90,17 @@ df_strava = df_strava.rename(columns={
     "Date de fin":      "date_fin",
     "Commentaire":      "commentaire",
 })
-
+# Conversion explicite des dates et typage numérique pour éviter les erreurs Spark plus tard
 df_strava["date_debut"] = pd.to_datetime(df_strava["date_debut"], format="%d/%m/%Y %H:%M")
 df_strava["date_fin"]   = pd.to_datetime(df_strava["date_fin"],   format="%d/%m/%Y %H:%M")
 df_strava["distance_m"] = pd.to_numeric(df_strava["distance_m"], errors="coerce")
-
+# On supprime la colonne ID source pour laisser PostgreSQL gérer sa propre auto-incrémentation
 df_strava = df_strava.drop(columns=["id"])
 
 df_strava.to_sql("activites", engine, if_exists="append", index=False)
 print(f"✅ {len(df_strava)} activités chargées dans 'activites'.")
 
 # ───────────────────────────────────────────────
-# 7. Fin
+# 7. Finalisation
 # ───────────────────────────────────────────────
 print("\n🎉 Toutes les données sources ont été rechargées proprement dans PostgreSQL !")

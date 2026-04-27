@@ -1,3 +1,12 @@
+"""
+RÉSUMÉ : BOT D'ANIMATION TEMPS RÉEL (KAFKA -> SLACK)
+Ce script agit comme un pont entre les données et la communication :
+1. Écoute Kafka : Surveille le topic CDC (Debezium) pour détecter les nouvelles lignes dans 'activites'.
+2. Enrichissement (Lookup) : Interroge la table 'salaries' pour convertir un ID (ex: 42) en nom complet (ex: Jean Dupont).
+3. Décodage Binaire : Gère les formats de données complexes (Base64/Struct) provenant du flux Kafka.
+4. Notification : Formate un message personnalisé avec emojis et citations selon le sport pratiqué.
+"""
+
 import os
 import json
 import base64
@@ -5,123 +14,94 @@ import struct
 import requests
 from kafka import KafkaConsumer
 from dotenv import load_dotenv
+from sqlalchemy import create_engine, text
 
 # ───────────────────────────────────────────────
-# 1. Charger les variables d'environnement
+# 1. Configuration & Initialisation
 # ───────────────────────────────────────────────
 load_dotenv()
+
+# Connexion DB pour le "Lookup" (récupérer les noms des salariés)
+engine = create_engine(f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@{os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}/{os.getenv('POSTGRES_DB')}")
 
 WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
 TOPIC       = os.getenv("KAFKA_TOPIC", "sport_db.public.activites")
 BOOTSTRAP   = os.getenv("KAFKA_BOOTSTRAP", "localhost:9092")
 
-EMOJIS = {
-    "Course à pied": "🏃‍♂️🔥", "Randonnée": "🥾🌄",
-    "Natation": "🏊‍♂️💦",      "Tennis": "🎾",
-    "Football": "⚽",            "Rugby": "🏉",
-    "Badminton": "🏸",           "Judo": "🥋",
-    "Boxe": "🥊",                "Escalade": "🧗",
-    "Triathlon": "🏅",           "Équitation": "🐴",
-    "Basketball": "🏀",          "Voile": "⛵",
-    "Runing": "🏃‍♂️",
-}
+# ───────────────────────────────────────────────
+# 2. Logique d'enrichissement et de décodage
+# ───────────────────────────────────────────────
 
-# ───────────────────────────────────────────────
-# 2. Fonction envoi Slack
-# ───────────────────────────────────────────────
-def send_slack(message):
-    if not WEBHOOK_URL:
-        print("⚠️ Aucun webhook Slack configuré (.env manquant)")
-        return False
-    response = requests.post(WEBHOOK_URL, json={"text": message})
-    return response.status_code == 200
+def get_salarie_name(id_salarie):
+    """Effectue une jointure applicative pour humaniser le message Slack."""
+    try:
+        with engine.connect() as conn:
+            query = text("SELECT nom, prenom FROM salaries WHERE id_salarie = :id")
+            result = conn.execute(query, {"id": id_salarie}).fetchone()
+            return f"{result.prenom} {result.nom}" if result else f"Salarié {id_salarie}"
+    except Exception:
+        return f"Salarié {id_salarie}"
 
-# ───────────────────────────────────────────────
-# 3. Décodage Debezium (base64 → float)
-# ───────────────────────────────────────────────
 def decode_distance(value):
-    if value is None:
-        return None
+    """Décode les types de données numériques complexes envoyés par Debezium."""
+    if value is None: return 0.0
     try:
         return float(value)
     except:
+        # Gestion du format binaire si la distance est encodée par le connecteur
         try:
             decoded = base64.b64decode(value)
-            if len(decoded) == 8:
-                return struct.unpack('>d', decoded)[0]
-            if len(decoded) == 4:
-                return struct.unpack('>f', decoded)[0]
-            return int.from_bytes(decoded, 'big') / 100
-        except:
-            return None
+            return struct.unpack('>d', decoded)[0] if len(decoded) == 8 else int.from_bytes(decoded, 'big') / 100
+        except: return 0.0
 
 # ───────────────────────────────────────────────
-# 4. Formatage du message Slack
+# 3. Moteur de formatage de message
 # ───────────────────────────────────────────────
+
 def format_message(payload):
     after = payload.get("after", {})
-    if not after:
-        return None
+    if not after: return None
 
-    id_salarie   = after.get("id_salarie", "?")
-    sport        = after.get("type_sport", "Sport")
-    distance_raw = after.get("distance_m")
-    duree_s      = after.get("temps_ecoule_s", 0)
-    commentaire  = after.get("commentaire", "") or ""
-    emoji        = EMOJIS.get(sport, "🏅")
+    nom_complet = get_salarie_name(after.get("id_salarie"))
+    sport       = after.get("type_sport", "Sport")
+    dist_km     = round(decode_distance(after.get("distance_m")) / 1000, 1)
+    duree_min   = round(int(after.get("temps_ecoule_s") or 0) / 60)
+    commentaire = after.get("commentaire") or ""
 
-    duree_min = round(int(duree_s) / 60) if duree_s else 0
-    distance  = decode_distance(distance_raw)
-
-    if distance and distance > 0:
-        dist_km = round(distance / 1000, 1)
-        msg = f"Bravo (ID {id_salarie}) ! {dist_km} km de {sport} en {duree_min} min ! {emoji}"
+    # Logique de personnalisation selon les consignes du projet
+    if "Course" in sport or "Run" in sport:
+        msg = f"Bravo *{nom_complet}* ! Tu viens de courir {dist_km} km en {duree_min} min ! Quelle énergie ! 🏃‍♂️🔥"
+    elif "Rando" in sport:
+        msg = f"Magnifique *{nom_complet}* ! Une randonnée de {dist_km} km terminée ! 🥾"
     else:
-        msg = f"Bravo (ID {id_salarie}) ! Belle séance de {sport} de {duree_min} min ! {emoji}"
+        msg = f"Bravo *{nom_complet}* ! {dist_km} km de {sport} en {duree_min} min ! 🏅"
 
     if commentaire.strip():
         msg += f'\n> _{commentaire}_'
-
     return msg
 
 # ───────────────────────────────────────────────
-# 5. Consumer Kafka / Redpanda
+# 4. Boucle de consommation (Stream Processing)
 # ───────────────────────────────────────────────
-print("🎧 En écoute sur Redpanda...")
-print(f"   Topic : {TOPIC}")
-print(f"   Bootstrap : {BOOTSTRAP}\n")
+print(f"🎧 Écoute du flux d'activités sur {TOPIC}...")
+
+
 
 consumer = KafkaConsumer(
     TOPIC,
     bootstrap_servers=BOOTSTRAP,
-    auto_offset_reset="earliest",
-    group_id=None,
+    auto_offset_reset="latest",
     value_deserializer=lambda x: json.loads(x.decode("utf-8")),
-    consumer_timeout_ms=15000,
 )
-
-nb_messages = 0
-nb_slack    = 0
 
 for message in consumer:
     try:
         payload = message.value.get("payload", {})
-        op      = payload.get("op", "")
-
-        if op in ("c", "r"):
+        # On ne traite que les opérations de Création ('c') ou de Lecture ('r')
+        if payload.get("op") in ("c", "r"):
             slack_msg = format_message(payload)
-            if slack_msg:
-                nb_messages += 1
-
-                if nb_slack < 5:
-                    ok = send_slack(slack_msg)
-                    nb_slack += 1
-                    statut = "✅" if ok else "❌"
-                    print(f"  {statut} [{op}] {slack_msg[:70]}...")
-                else:
-                    print(f"  📨 [{op}] Message détecté (non envoyé Slack)")
-
+            if slack_msg and WEBHOOK_URL:
+                requests.post(WEBHOOK_URL, json={"text": slack_msg})
+                print(f" ✅ Alerte Slack envoyée pour {payload['after']['id_salarie']}")
     except Exception as e:
-        print(f"  ❌ Erreur : {e}")
-
-print(f"\n🎉 {nb_messages} messages traités | {nb_slack} envoyés sur Slack !")
+        print(f" ❌ Erreur : {e}")
