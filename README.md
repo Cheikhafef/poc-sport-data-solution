@@ -28,6 +28,7 @@ Ce projet implémente un pipeline complet, industrialisé, et orchestré permett
 
 ## 📁 Structure du projet <br>
 
+```
 poc-sport-data-solution/<br>
 ├── 1_data_generation/<br>
 │   ├── generate_strava_data.py     # Génération 4212 activités simulées<br>
@@ -64,7 +65,7 @@ poc-sport-data-solution/<br>
 ├── docs/ <br>
 │   └── architecture.png <br>
 └── README.md <br>
-
+```
 
    ------
 ## 🚀 Lancement rapide <br>
