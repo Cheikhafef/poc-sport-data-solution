@@ -31,6 +31,8 @@ Ce projet implémente un pipeline complet, industrialisé, et orchestré permett
 poc-sport-data-solution/<br>
 ├── 1_data_generation/<br>
 │   ├── generate_strava_data.py     # Génération 4212 activités simulées<br>
+|   ├── interface_web.py <br>
+|   ├── demo_generation.py <br>
 │   └── interface_saisie.py         # Saisie live → Debezium → Slack <br>
 ├── 2_database/<br>
 │   └── load_data.py                # Chargement initial PostgreSQL<br>
